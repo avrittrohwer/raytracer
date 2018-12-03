@@ -323,9 +323,12 @@ void trace(struct Object* objects, int num_objects, struct Ray* ray, float* ligh
 
     trace(objects, num_objects, &reflected_ray, light_pos, color, iteration += 1);
   } else {
-    // see if we can reach the light
+    // shoot a ray at the light, if we hit anything sooner than the light then we're in a shadow
     struct Ray shadow_ray;
     vec_sub(shadow_ray.direction, light_pos, point_hit);
+    float light_dist = magnitude(shadow_ray.direction);
+
+    // normalize, make origin the point we hit
     normalize(shadow_ray.direction);
     memcpy(shadow_ray.origin, point_hit, 3 * sizeof(float));
 
@@ -336,7 +339,7 @@ void trace(struct Object* objects, int num_objects, struct Ray* ray, float* ligh
       if (obj == closest_obj) continue;
 
       float t = obj->intersect_fn(obj, &shadow_ray);
-      if (t != 0) {
+      if (t != 0 && t < light_dist) {
         hit_something = 1;
         break;
       }
