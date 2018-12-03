@@ -21,3 +21,12 @@ struct Object {
 };
 ```
 I only wrote code for spheres and triangles but the tracing logic is agnostic to object types as long as an intersect function and normal function are provided.
+
+## Running
+
+To run the raytracer, clone the repo and run `make`.
+There are two scenes defined in `ray.c`, `reference` and `custom`.
+To make the images, run `./ray reference` or `./ray custom`.
+They will produce either `reference.png` or `custom.png`, respectfully.
+
+Running `make clean` will remove `./ray`, `./reference.png`, and `custom.png`.
