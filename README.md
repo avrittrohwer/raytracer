@@ -20,4 +20,4 @@ struct Object {
   int is_reflective;
 };
 ```
-I only wrote code for shperes and triangles but the tracing logic is written so that extending it to other kinds of objects should be fairly minimaml.
+I only wrote code for spheres and triangles but the tracing logic is agnostic to object types as long as an intersect function and normal function are provided.
