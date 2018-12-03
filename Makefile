@@ -1,10 +1,10 @@
-cc     = gcc -std=gnu99
-cflags = -Wall -Wextra -Wpedantic
+cc            = gcc -std=c11
+warning_flags = -Wall -Wextra -Wpedantic
 
 all: ray
 
-ray: stb_image_write.h ray.c
-	$(cc) $(cflags) stb_image_write.h ray.c -o ray
+ray: stb_image_write.h vec_math.h ray.c
+	$(cc) $(warning_flags) stb_image_write.h vec_math.h ray.c -o ray -lm
 
 clean:
-	rm ./ray
+	rm ./ray ./image.png
