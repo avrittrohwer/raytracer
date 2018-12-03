@@ -7,4 +7,4 @@ ray: stb_image_write.h vec_math.h ray.c
 	$(cc) $(warning_flags) stb_image_write.h vec_math.h ray.c -o ray -lm
 
 clean:
-	rm ./ray ./image.png
+	rm ./ray ./reference.png ./custom.png

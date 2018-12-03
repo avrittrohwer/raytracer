@@ -1,12 +1,12 @@
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 #include "vec_math.h"
 
+// how wide / tall the resulting image is
 #define IMAGE_SIZE 512
-
-void pp(char* label, unsigned char* p) { printf("%s: (%d, %d, %d)\n", label, p[0], p[1], p[2]); }
 
 // Sphere is defined by a center point and a radius
 struct Sphere {
@@ -141,6 +141,135 @@ void triangle_normal(struct Object* obj, __attribute__((unused)) float* point, f
   normalize(normal);
 }
 
+// two object lists, selectable on command line
+// clang-format off
+struct Object reference[] = {
+  // Large reflective sphere
+  {
+    .sphere = {{0, 0, -16}, 2},
+    .intersect_fn = sphere_intersects,
+    .normal_fn = sphere_normal,
+    .color = {0},
+    .is_reflective = 1
+  },
+  // Smaller reflective sphere
+  {
+    .sphere = {{3, -1, -14}, 1},
+    .intersect_fn = sphere_intersects,
+    .normal_fn = sphere_normal,
+    .color = {0},
+    .is_reflective = 1
+  },
+  // Smaller red sphere
+  {
+    .sphere = {{-3, -1, -14}, 1},
+    .intersect_fn = sphere_intersects,
+    .normal_fn = sphere_normal,
+    .color = {255, 0, 0},
+    .is_reflective = 0
+  },
+  // back wall lower triangle
+  {
+    .triangle = {{-8, -2, -20}, {8, -2, -20}, {8, 10, -20}},
+    .intersect_fn = triangle_intersects,
+    .normal_fn = triangle_normal,
+    .color = {0, 0, 255},
+    .is_reflective = 0
+  },
+  // back wall upper triangle
+  {
+    .triangle = {{-8, -2, -20}, {8, 10, -20}, {-8, 10, -20}},
+    .intersect_fn = triangle_intersects,
+    .normal_fn = triangle_normal,
+    .color = {0, 0, 255},
+    .is_reflective = 0
+  },
+  // floor further triangle
+  {
+    .triangle = {{-8, -2, -20}, {8, -2, -10}, {8, -2, -20}},
+    .intersect_fn = triangle_intersects,
+    .normal_fn = triangle_normal,
+    .color = {255, 255, 255},
+    .is_reflective = 0
+  },
+  // floor closer triangle
+  {
+    .triangle = {{-8, -2, -20}, {-8, -2, -10}, {8, -2, -10}},
+    .intersect_fn = triangle_intersects,
+    .normal_fn = triangle_normal,
+    .color = {255, 255, 255},
+    .is_reflective = 0
+  },
+  // right wall lower triangle
+  {
+    .triangle = {{8, -2, -20}, {8, -2, -10}, {8, 10, -20}},
+    .intersect_fn = triangle_intersects,
+    .normal_fn = triangle_normal,
+    .color = {255, 0, 0},
+    .is_reflective = 0
+  }
+};
+
+struct Object custom[] = {
+  // Lower sphere
+  {
+    .sphere = {{0, -5, -10}, 2},
+    .intersect_fn = sphere_intersects,
+    .normal_fn = sphere_normal,
+    .color = {255, 0, 0},
+    .is_reflective = 0
+  },
+  // Upper sphere
+  {
+    .sphere = {{0, 5, -20}, 2},
+    .intersect_fn = sphere_intersects,
+    .normal_fn = sphere_normal,
+    .color = {0, 255, 0},
+    .is_reflective = 0
+  },
+  // Left sphere
+  {
+    .sphere = {{-5, 0, -15}, 2},
+    .intersect_fn = sphere_intersects,
+    .normal_fn = sphere_normal,
+    .color = {0, 0, 255},
+    .is_reflective = 0
+  },
+  // Right sphere
+  {
+    .sphere = {{5, 0, -25}, 2},
+    .intersect_fn = sphere_intersects,
+    .normal_fn = sphere_normal,
+    .color = {255, 255, 255},
+    .is_reflective = 0
+  },
+  // Middle sphere
+  {
+    .sphere = {{0, 0, -16}, 2},
+    .intersect_fn = sphere_intersects,
+    .normal_fn = sphere_normal,
+    .color = {0},
+    .is_reflective = 1
+  },
+  // back wall lower triangle
+  {
+    .triangle = {{-50, -50, -100}, {50, -50, -100}, {50, 50, -100}},
+    .intersect_fn = triangle_intersects,
+    .normal_fn = triangle_normal,
+    .color = {20, 20, 20},
+    .is_reflective = 0
+  },
+  // back wall upper triangle
+  {
+    .triangle = {{-50, -50, -100}, {50, 50, -100}, {-50, 50, -100}},
+    .intersect_fn = triangle_intersects,
+    .normal_fn = triangle_normal,
+    .color = {20, 20, 20},
+    .is_reflective = 0
+  },
+};
+// clang-format on
+
 // Traces a ray, writes color
 void trace(struct Object* objects, int num_objects, struct Ray* ray, float* light_pos,
            unsigned char* color, int iteration) {
@@ -213,124 +342,39 @@ void trace(struct Object* objects, int num_objects, struct Ray* ray, float* ligh
       }
     }
 
-    if (hit_something) {
-      // use ambient shading
-      color[0] = 51;
-      color[1] = 51;
-      color[2] = 51;
-    } else {
-      // limit diffuse to [0.2, 1]
-      float diffuse = dot(shadow_ray.direction, normal);
-      if (diffuse < 0.2) diffuse = 0.2;
+    // limit diffuse to [0.2, 1]
+    float diffuse = dot(shadow_ray.direction, normal);
+    if (diffuse < 0.2 || hit_something) diffuse = 0.2;
 
-      // calculate adjusted color
-      color[0] = closest_obj->color[0] * diffuse;
-      color[1] = closest_obj->color[1] * diffuse;
-      color[2] = closest_obj->color[2] * diffuse;
-    }
+    // calculate adjusted color
+    color[0] = closest_obj->color[0] * diffuse;
+    color[1] = closest_obj->color[1] * diffuse;
+    color[2] = closest_obj->color[2] * diffuse;
   }
 }
 
-int main() {
-  // Define objects in a null terminated list
-  int num_objects = 8;
-  // clang-format off
-  struct Object objects[] = {
-    // Sphere 1
-    {
-      .sphere = {
-        { 0, 0, -16 },
-        2
-      },
-      .intersect_fn = sphere_intersects,
-      .normal_fn = sphere_normal,
-      .color = { 0 },
-      .is_reflective = 1
-    },
-    // Sphere 2
-    {
-      .sphere = {
-        { 3, -1, -14 },
-        1
-      },
-      .intersect_fn = sphere_intersects,
-      .normal_fn = sphere_normal,
-      .color = { 0 },
-      .is_reflective = 1
-    },
-    // Sphere 3
-    {
-      .sphere = {
-        { -3, -1, -14 },
-        1
-      },
-      .intersect_fn = sphere_intersects,
-      .normal_fn = sphere_normal,
-      .color = { 255, 0, 0 },
-      .is_reflective = 0
-    },
-    // Back triangle 1
-    {
-      .triangle = {
-        { -8, -2, -20 },
-        { 8, -2, -20 },
-        { 8, 10, -20 }
-      },
-      .intersect_fn = triangle_intersects,
-      .normal_fn = triangle_normal,
-      .color = { 0, 0, 255 },
-      .is_reflective = 0
-    },
-    // Back triangle 2
-    {
-      .triangle = {
-        { -8, -2, -20 },
-        { 8, 10, -20 },
-        { -8, 10, -20 }
-      },
-      .intersect_fn = triangle_intersects,
-      .normal_fn = triangle_normal,
-      .color = { 0, 0, 255 },
-      .is_reflective = 0
-    },
-    // Floor triangle 1
-    {
-      .triangle = {
-        { -8, -2, -20 },
-        { 8, -2, -10 },
-        { 8, -2, -20 }
-      },
-      .intersect_fn = triangle_intersects,
-      .normal_fn = triangle_normal,
-      .color = { 255, 255, 255 },
-      .is_reflective = 0
-    },
-    // Floor triangle 2
-    {
-      .triangle = {
-        { -8, -2, -20 },
-        { -8, -2, -10 },
-        { 8, -2, -10 }
-      },
-      .intersect_fn = triangle_intersects,
-      .normal_fn = triangle_normal,
-      .color = { 255, 255, 255 },
-      .is_reflective = 0
-    },
-    // Right red triangle
-    {
-      .triangle = {
-        { 8, -2, -20 },
-        { 8, -2, -10 },
-        { 8, 10, -20 }
-      },
-      .intersect_fn = triangle_intersects,
-      .normal_fn = triangle_normal,
-      .color = { 255, 0, 0 },
-      .is_reflective = 0
-    }
-  };
-  // clang-format on
+int main(int argc, char** argv) {
+  char usage_msg[] = {"usage: ray reference|custom\n"};
+
+  // parse args for reference or custom
+  if (argc < 2) {
+    printf("%s", usage_msg);
+    return 1;
+  }
+
+  // assign object list and figure out how many elements they have
+  struct Object* objects;
+  int num_objects;
+  if (!strcmp("reference", argv[1])) {
+    objects = reference;
+    num_objects = sizeof(reference) / sizeof(struct Object);
+  } else if (!strcmp("custom", argv[1])) {
+    objects = custom;
+    num_objects = sizeof(custom) / sizeof(struct Object);
+  } else {
+    printf("%s", usage_msg);
+    return 1;
+  }
 
   // Define the scene
   struct Scene scene = {
@@ -370,6 +414,10 @@ int main() {
     }
   }
 
-  stbi_write_png("./image.png", IMAGE_SIZE, IMAGE_SIZE, 3, image_buf, IMAGE_SIZE * 3);
+  // write image buffer to file
+  char file_name[14];
+  sprintf(file_name, "%s.png", argv[1]);
+
+  stbi_write_png(file_name, IMAGE_SIZE, IMAGE_SIZE, 3, image_buf, IMAGE_SIZE * 3);
   return 0;
 }
