@@ -143,7 +143,15 @@ void triangle_normal(struct Object* obj, __attribute__((unused)) float* point, f
 
 // Traces a ray, writes color
 void trace(struct Object* objects, int num_objects, struct Ray* ray, float* light_pos,
-           unsigned char* color) {
+           unsigned char* color, int iteration) {
+  // if we've bounced around 10 times, just use the color black
+  if (iteration > 10) {
+    color[0] = 0;
+    color[1] = 0;
+    color[2] = 0;
+    return;
+  };
+
   // Find closest intersecting object
   float min_t = INFINITY;
   struct Object* closest_obj = NULL;
@@ -177,18 +185,19 @@ void trace(struct Object* objects, int num_objects, struct Ray* ray, float* ligh
 
   if (closest_obj->is_reflective) {
     // bounce a ray off and use that color
-    color[0] = 255;
-    color[1] = 255;
-    color[2] = 255;
-    return;
+    // reflected = initial - 2 normal (initial dot normal)
+    struct Ray reflected_ray;
+    vec_mult(normal, 2 * dot(ray->direction, normal), normal);
+    vec_sub(reflected_ray.direction, ray->direction, normal);
+    normalize(reflected_ray.direction);
+    memcpy(reflected_ray.origin, point_hit, 3 * sizeof(float));
+
+    trace(objects, num_objects, &reflected_ray, light_pos, color, iteration += 1);
   } else {
     // see if we can reach the light
-    float to_light[3];
-    vec_sub(to_light, light_pos, point_hit);
-    normalize(to_light);
-
     struct Ray shadow_ray;
-    memcpy(shadow_ray.direction, to_light, 3 * sizeof(float));
+    vec_sub(shadow_ray.direction, light_pos, point_hit);
+    normalize(shadow_ray.direction);
     memcpy(shadow_ray.origin, point_hit, 3 * sizeof(float));
 
     // if vector from point_hit to light intersects any objects, we're in a shadow
@@ -206,20 +215,18 @@ void trace(struct Object* objects, int num_objects, struct Ray* ray, float* ligh
 
     if (hit_something) {
       // use ambient shading
-      unsigned char shaded[] = {51, 51, 51};
-      memcpy(color, shaded, 3 * sizeof(unsigned char));
+      color[0] = 51;
+      color[1] = 51;
+      color[2] = 51;
     } else {
       // limit diffuse to [0.2, 1]
-      float diffuse = dot(to_light, normal);
+      float diffuse = dot(shadow_ray.direction, normal);
       if (diffuse < 0.2) diffuse = 0.2;
 
       // calculate adjusted color
-      unsigned char shaded[3];
-      shaded[0] = closest_obj->color[0] * diffuse;
-      shaded[1] = closest_obj->color[1] * diffuse;
-      shaded[2] = closest_obj->color[2] * diffuse;
-
-      memcpy(color, shaded, 3 * sizeof(unsigned char));
+      color[0] = closest_obj->color[0] * diffuse;
+      color[1] = closest_obj->color[1] * diffuse;
+      color[2] = closest_obj->color[2] * diffuse;
     }
   }
 }
@@ -359,7 +366,7 @@ int main() {
 
       // fill in image with color of pixel
       int index = (IMAGE_SIZE * y * 3) + (3 * x);
-      trace(scene.objects, num_objects, &ray, scene.light_pos, &image_buf[index]);
+      trace(scene.objects, num_objects, &ray, scene.light_pos, &image_buf[index], 0);
     }
   }
 
