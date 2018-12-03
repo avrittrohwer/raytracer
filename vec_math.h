@@ -19,6 +19,13 @@ static inline void normalize(float* a) {
 // Calculates the dot product of two vectors
 static inline float dot(float* a, float* b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
+// Calculates the cross product of two vectors
+static inline void cross(float* r, float* a, float* b) {
+  r[0] = a[1] * b[2] - a[2] * b[1];
+  r[1] = a[2] * b[0] - a[0] * b[2];
+  r[2] = a[0] * b[1] - a[1] * b[0];
+}
+
 // r = a + b
 static inline void vec_add(float* r, float* a, float* b) {
   r[0] = a[0] + b[0];

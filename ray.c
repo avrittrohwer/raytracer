@@ -6,7 +6,7 @@
 
 #define IMAGE_SIZE 512
 
-void pp(char* label, float* p) { printf("%s: (%f, %f, %f)\n", label, p[0], p[1], p[2]); }
+void pp(char* label, unsigned char* p) { printf("%s: (%d, %d, %d)\n", label, p[0], p[1], p[2]); }
 
 // Sphere is defined by a center point and a radius
 struct Sphere {
@@ -34,8 +34,10 @@ struct Object {
     struct Sphere sphere;
     struct Triangle triangle;
   };
-  // intersect function for the object
+  // calculates the time an intersection occurs
   float (*intersect_fn)(struct Object*, struct Ray*);
+  // calculates the normal at a given point
+  void (*normal_fn)(struct Object*, float* point, float* normal);
   // color of the object
   unsigned char color[3];
   int is_reflective;
@@ -47,6 +49,7 @@ struct Scene {
   float upper_left[3];     // upper left position of the image plane
   float plane_size;        // how tall and wide the plane is
   float cam_pos[3];        // position of the camera
+  float light_pos[3];      // Position of the light
 };
 
 // Returns time ray hits sphere or 0 if it doesn't
@@ -118,8 +121,29 @@ float triangle_intersects(struct Object* obj, struct Ray* ray) {
   return t;
 }
 
+// Calculates the normal at the given point
+void sphere_normal(struct Object* obj, float* point, float* normal) {
+  // normal is point - center
+  vec_sub(normal, point, obj->sphere.center);
+  normalize(normal);
+}
+
+// Calculates the normal at the given point
+void triangle_normal(struct Object* obj, __attribute__((unused)) float* point, float* normal) {
+  // normal is the cross product of vectors ab and ac
+  float ab[3];
+  vec_sub(ab, obj->triangle.b, obj->triangle.a);
+
+  float ac[3];
+  vec_sub(ac, obj->triangle.c, obj->triangle.a);
+
+  cross(normal, ab, ac);
+  normalize(normal);
+}
+
 // Traces a ray, writes color
-void trace(struct Object* objects, int num_objects, struct Ray* ray, unsigned char* color) {
+void trace(struct Object* objects, int num_objects, struct Ray* ray, float* light_pos,
+           unsigned char* color) {
   // Find closest intersecting object
   float min_t = INFINITY;
   struct Object* closest_obj = NULL;
@@ -147,6 +171,10 @@ void trace(struct Object* objects, int num_objects, struct Ray* ray, unsigned ch
   vec_mult(point_hit, min_t, ray->direction);
   vec_add(point_hit, point_hit, ray->origin);
 
+  // find the normal of the surface
+  float normal[3];
+  closest_obj->normal_fn(closest_obj, point_hit, normal);
+
   if (closest_obj->is_reflective) {
     // bounce a ray off and use that color
     color[0] = 255;
@@ -154,9 +182,45 @@ void trace(struct Object* objects, int num_objects, struct Ray* ray, unsigned ch
     color[2] = 255;
     return;
   } else {
-    // Use color of object
-    memcpy(color, closest_obj->color, 3 * sizeof(unsigned char));
-    return;
+    // see if we can reach the light
+    float to_light[3];
+    vec_sub(to_light, light_pos, point_hit);
+    normalize(to_light);
+
+    struct Ray shadow_ray;
+    memcpy(shadow_ray.direction, to_light, 3 * sizeof(float));
+    memcpy(shadow_ray.origin, point_hit, 3 * sizeof(float));
+
+    // if vector from point_hit to light intersects any objects, we're in a shadow
+    int hit_something = 0;
+    for (int i = 0; i < num_objects; i += 1) {
+      struct Object* obj = &objects[i];
+      if (obj == closest_obj) continue;
+
+      float t = obj->intersect_fn(obj, &shadow_ray);
+      if (t != 0) {
+        hit_something = 1;
+        break;
+      }
+    }
+
+    if (hit_something) {
+      // use ambient shading
+      unsigned char shaded[] = {51, 51, 51};
+      memcpy(color, shaded, 3 * sizeof(unsigned char));
+    } else {
+      // limit diffuse to [0.2, 1]
+      float diffuse = dot(to_light, normal);
+      if (diffuse < 0.2) diffuse = 0.2;
+
+      // calculate adjusted color
+      unsigned char shaded[3];
+      shaded[0] = closest_obj->color[0] * diffuse;
+      shaded[1] = closest_obj->color[1] * diffuse;
+      shaded[2] = closest_obj->color[2] * diffuse;
+
+      memcpy(color, shaded, 3 * sizeof(unsigned char));
+    }
   }
 }
 
@@ -172,6 +236,7 @@ int main() {
         2
       },
       .intersect_fn = sphere_intersects,
+      .normal_fn = sphere_normal,
       .color = { 0 },
       .is_reflective = 1
     },
@@ -182,6 +247,7 @@ int main() {
         1
       },
       .intersect_fn = sphere_intersects,
+      .normal_fn = sphere_normal,
       .color = { 0 },
       .is_reflective = 1
     },
@@ -192,6 +258,7 @@ int main() {
         1
       },
       .intersect_fn = sphere_intersects,
+      .normal_fn = sphere_normal,
       .color = { 255, 0, 0 },
       .is_reflective = 0
     },
@@ -203,6 +270,7 @@ int main() {
         { 8, 10, -20 }
       },
       .intersect_fn = triangle_intersects,
+      .normal_fn = triangle_normal,
       .color = { 0, 0, 255 },
       .is_reflective = 0
     },
@@ -214,6 +282,7 @@ int main() {
         { -8, 10, -20 }
       },
       .intersect_fn = triangle_intersects,
+      .normal_fn = triangle_normal,
       .color = { 0, 0, 255 },
       .is_reflective = 0
     },
@@ -225,6 +294,7 @@ int main() {
         { 8, -2, -20 }
       },
       .intersect_fn = triangle_intersects,
+      .normal_fn = triangle_normal,
       .color = { 255, 255, 255 },
       .is_reflective = 0
     },
@@ -236,6 +306,7 @@ int main() {
         { 8, -2, -10 }
       },
       .intersect_fn = triangle_intersects,
+      .normal_fn = triangle_normal,
       .color = { 255, 255, 255 },
       .is_reflective = 0
     },
@@ -247,6 +318,7 @@ int main() {
         { 8, 10, -20 }
       },
       .intersect_fn = triangle_intersects,
+      .normal_fn = triangle_normal,
       .color = { 255, 0, 0 },
       .is_reflective = 0
     }
@@ -258,15 +330,16 @@ int main() {
       objects,      // array of objects
       {-1, 1, -2},  // upper left corner of image plane
       2,            // plane width
-      {0, 0, 0}     // cam position
+      {0, 0, 0},    // cam position
+      {3, 5, -15}   // light position
   };
 
-  // Trace the image
+  // Initialize the image buffer, calculate pixel width
   unsigned char image_buf[3 * IMAGE_SIZE * IMAGE_SIZE];
-
   float px_width = scene.plane_size / IMAGE_SIZE;
   float px_half = px_width / 2;
 
+  // Trace the scene
   for (int y = 0; y < IMAGE_SIZE; y += 1) {
     for (int x = 0; x < IMAGE_SIZE; x += 1) {
       // find center of pixel
@@ -277,7 +350,6 @@ int main() {
         scene.upper_left[2]
       };
       // clang-format on
-      // printf("Px: d(%f, %f, %f)\n", px_center[0], px_center[1], px_center[2]);
 
       // Make ray
       struct Ray ray;
@@ -287,7 +359,7 @@ int main() {
 
       // fill in image with color of pixel
       int index = (IMAGE_SIZE * y * 3) + (3 * x);
-      trace(scene.objects, num_objects, &ray, &image_buf[index]);
+      trace(scene.objects, num_objects, &ray, scene.light_pos, &image_buf[index]);
     }
   }
 
